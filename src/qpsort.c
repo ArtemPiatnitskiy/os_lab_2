@@ -5,11 +5,19 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <stdio.h>
+#include <time.h>
+
+
+// Минимальный размер подмассива для параллелизации
+// Если подмассив меньше этого значения, не создаём новый поток
+#define PARALLEL_THRESHOLD 10000
 
 pthread_mutex_t thread_count_mutex = PTHREAD_MUTEX_INITIALIZER;
 size_t active_threads = 0;
 // Переменная для отслеживания максимального количества одновременных потоков
 size_t max_threads_reached = 0;
+
+
 
 void swap(int *a, int *b) {
     int temp = *a;
@@ -46,14 +54,18 @@ void *quicksort_recursive(void *arg) {
     // Разделение массива
     int pi = partition(data->array, data->low, data->high);
 
+    // Вычисляем размер подмассива
+    int size = data->high - data->low + 1;
+    
     // Создание данных для левого и правого подмассивов
     // Проверяем можно ли создать новый поток
+    // Условия: 1) есть свободные потоки, 2) подмассив достаточно большой
     pthread_mutex_lock(&thread_count_mutex); // блокируем мьютекс перед проверкой и изменением active_threads
     // Переменная (вернёт 0 или 1) для проверки возможности создания потока
-    int can_create_thread = (active_threads < N_threads_max);
+    int can_create_thread = (active_threads < N_threads_max) && (size >= PARALLEL_THRESHOLD);
     if (can_create_thread) {
         active_threads++;
-        // Обновляем максимальное количество одновременных потоков, если нужно
+        // Обновляем максимальное количество одновременных потоков
         if (active_threads > max_threads_reached) {
             max_threads_reached = active_threads;
         }
@@ -108,6 +120,10 @@ void *quicksort_recursive(void *arg) {
 
 
 void qpsort(int *array, int low, int hight) {
+    // Засекаем время начала сортировки
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    
     // Создаем структуру данных для передачи в рекурсивную функцию
     thread_data_t *data = malloc(sizeof(thread_data_t));
     // Инициализируем структуру данных
@@ -118,6 +134,14 @@ void qpsort(int *array, int low, int hight) {
     // Запускаем рекурсивную функцию быстрой сортировки
     quicksort_recursive(data);
     
+    // Засекаем время окончания сортировки
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    
+    // Вычисляем затраченное время
+    double elapsed = (end.tv_sec - start.tv_sec) + 
+                     (end.tv_nsec - start.tv_nsec) / 1000000000.0;
+    
     // Выводим статистику
     fprintf(stderr, "\n===Максимальное количество одновременных потоков: %zu ===\n", max_threads_reached);
+    fprintf(stderr, "===Время сортировки: %.3f секунд ===\n", elapsed);
 }

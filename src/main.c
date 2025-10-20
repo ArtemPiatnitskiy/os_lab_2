@@ -1,15 +1,14 @@
+#include <stdio.h>
 #include <errno.h>
 #include <stddef.h>
-#include <stdio.h>
 #include "../include/qpsort.h"
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
-// #include <time.h>
+#include <time.h>
 #include <string.h>
-// #include <errno.h>
 
-#define MAX_ARRAY_SIZE 10000000  // Максимальный размер массива
+#define MAX_ARRAY_SIZE 20000000  // Максимальный размер массива
 #define INITIAL_SIZE 1000        // Начальный размер для динамического массива
 
 size_t N_threads_max = 1; // значение по умолчанию
@@ -24,6 +23,9 @@ int main(int argc, char *argv[]) {
         perror("Failed to allocate memory");
         return EXIT_FAILURE;
     }
+
+    FILE *input = stdin;
+    int close_file = 0;
 
     // Определяем количество потоков из аргументов командной строки
     if (argc > 1) {
@@ -53,6 +55,21 @@ int main(int argc, char *argv[]) {
                 // Устанавливаем значение N_threads_max
                 N_threads_max = narg;
                 i++; // пропускаем следующий аргумент, так как он уже обработан
+            } else if (strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--file") == 0) {
+                // Обработка файла
+                if (i + 1 >= argc) {
+                    fprintf(stderr, "Error: Missing value for %s\n", argv[i]);
+                    free(array);
+                    return EXIT_FAILURE;
+                }
+                input = fopen(argv[i + 1], "r");
+                if (input == NULL) {
+                    perror("Failed to open input file");
+                    free(array);
+                    return EXIT_FAILURE;
+                }
+                close_file = 1;
+                i++; // пропускаем следующий аргумент
             }
         }
         // Проверяем корректность значения N_threads_max
@@ -67,9 +84,9 @@ int main(int argc, char *argv[]) {
         N_threads_max = 1; // значение по умолчанию
     }
 
-    // Заполняем массив значениями из stdin (читаем до конца файла)
+    // Заполняем массив значениями из файла или stdin (читаем до конца файла)
     int value;
-    while (scanf("%d", &value) == 1) {
+    while (fscanf(input, "%d", &value) == 1) {
         // Если массив заполнен, увеличиваем его размер
         if (array_size >= capacity) {
             capacity *= 2;
@@ -92,12 +109,16 @@ int main(int argc, char *argv[]) {
     if (array_size == 0) {
         fprintf(stderr, "Error: No data to sort\n");
         free(array);
+        if (close_file) fclose(input);
         return EXIT_FAILURE;
     }
 
-    fprintf(stderr, "Прочитано элементов: %zu\n", array_size);
+    if (close_file) fclose(input);
 
+    fprintf(stderr, "Прочитано элементов: %zu\n", array_size);
+    
     // Сортируем массив с помощью быстрой сортировки
+    // Время замеряется внутри qpsort()
     qpsort(array, 0, array_size - 1);
 
     // Печатаем элементы отсортированного массива в файл
